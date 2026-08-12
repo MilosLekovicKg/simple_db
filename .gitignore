@@ -4,3 +4,6 @@ build/
 *.exe
 *.out
 .vs/
+simple_db.db
+src/vc140.pdb
+.vscode/c_cpp_properties.json

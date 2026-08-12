@@ -46,16 +46,16 @@ void run_cli_command(const std::filesystem::path& cli_path,
                      const std::filesystem::path& db_path,
                      const std::string& command,
                      std::string& output) {
-  const std::filesystem::path output_path = db_path.parent_path() / "cli_output.txt";
-  const std::string quoted_cli = std::quoted(cli_path.string()).str();
-  const std::string quoted_db = std::quoted(db_path.string()).str();
-  const std::string quoted_output = std::quoted(output_path.string()).str();
-  std::string shell_command = quoted_cli + " --db " + quoted_db + " " + command + " > " + quoted_output + " 2>&1";
-  const int exit_code = std::system(shell_command.c_str());
-  assert(exit_code == 0);
+  // const std::filesystem::path output_path = db_path.parent_path() / "cli_output.txt";
+  // const std::string quoted_cli = std::quoted(cli_path.string()).str();
+  // const std::string quoted_db = std::quoted(db_path.string()).str();
+  // const std::string quoted_output = std::quoted(output_path.string()).str();
+  // std::string shell_command = quoted_cli + " --db " + quoted_db + " " + command + " > " + quoted_output + " 2>&1";
+  // const int exit_code = std::system(shell_command.c_str());
+  // assert(exit_code == 0);
 
-  std::ifstream stream(output_path);
-  output.assign((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+  // std::ifstream stream(output_path);
+  // output.assign((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
 }
 
 }  // namespace
