@@ -1,4 +1,5 @@
 #include "simple_db/database.hpp"
+#include "simple_db/serialization.h"
 
 #include <algorithm>
 #include <fstream>
@@ -69,22 +70,7 @@ void Database::load_from_disk() {
     return;
   }
 
-  int count{};
-  input.read(reinterpret_cast<char*>(&count), sizeof(count));
-
-  for (int i = 0; i < count; ++i) {
-    int key_size{};
-    input.read(reinterpret_cast<char*>(&key_size), sizeof(key_size));
-    std::string key(key_size, '\0');
-    input.read(&key[0], key_size);
-
-    int value_size{};
-    input.read(reinterpret_cast<char*>(&value_size), sizeof(value_size));
-    std::string value(value_size, '\0');
-    input.read(&value[0], value_size);
-
-    store_[std::move(key)] = std::move(value);
-  }
+  deserialize_store(store_, input);
 }
 
 void Database::flush_to_disk() const {
@@ -97,18 +83,7 @@ void Database::flush_to_disk() const {
     return;
   }
 
-  const std::int32_t count = static_cast<std::int32_t>(store_.size());
-  output.write(reinterpret_cast<const char*>(&count), sizeof(count));
-
-  for (const auto& [key, value] : store_) {
-    const std::int32_t key_size = static_cast<std::int32_t>(key.size());
-    output.write(reinterpret_cast<const char*>(&key_size), sizeof(key_size));
-    output.write(key.data(), key_size);
-
-    const std::int32_t value_size = static_cast<std::int32_t>(value.size());
-    output.write(reinterpret_cast<const char*>(&value_size), sizeof(value_size));
-    output.write(value.data(), value_size);
-  }
+  serialize_store(store_, output);
 }
 
 }  // namespace simpledb
