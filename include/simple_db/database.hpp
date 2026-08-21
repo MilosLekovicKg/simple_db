@@ -6,6 +6,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <vector>
+#include "simple_db/logrecord.h"
 
 namespace simpledb {
 
@@ -19,11 +20,9 @@ class Database {
   bool remove(std::string_view key);
   std::vector<std::string> keys() const;
   std::size_t size() const;
-  void clear();
 
  private:
   void load_from_disk();
-  void flush_to_disk() const;
 
   std::unordered_map<std::string, std::string> store_;
   std::string path_;

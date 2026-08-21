@@ -1,5 +1,4 @@
 #include "simple_db/database.hpp"
-#include "simple_db/serialization.h"
 
 #include <algorithm>
 #include <fstream>
@@ -7,22 +6,15 @@
 
 namespace simpledb {
 
-namespace {
-
-std::string trim_line(std::string line) {
-  line.erase(line.find_last_not_of("\r\n") + 1);
-  return line;
-}
-
-}  // namespace
-
 Database::Database(std::string_view path) : path_(path) {
   load_from_disk();
 }
 
 void Database::put(std::string_view key, std::string_view value) {
+  LogRecord record(LogRecordType::Put, key, value);
+  record.flush_to_disk(path_);
+
   store_[std::string(key)] = std::string(value);
-  flush_to_disk();
 }
 
 std::optional<std::string> Database::get(std::string_view key) const {
@@ -30,15 +22,15 @@ std::optional<std::string> Database::get(std::string_view key) const {
   if (it == store_.end()) {
     return std::nullopt;
   }
+
   return it->second;
 }
 
 bool Database::remove(std::string_view key) {
-  const bool removed = store_.erase(std::string(key)) > 0;
-  if (removed) {
-    flush_to_disk();
-  }
-  return removed;
+  LogRecord record(LogRecordType::Remove, key, "");
+  record.flush_to_disk(path_);
+
+  return store_.erase(std::string(key)) > 0;
 }
 
 std::vector<std::string> Database::keys() const {
@@ -48,16 +40,12 @@ std::vector<std::string> Database::keys() const {
     result.push_back(key);
   }
   std::sort(result.begin(), result.end());
+
   return result;
 }
 
 std::size_t Database::size() const {
   return store_.size();
-}
-
-void Database::clear() {
-  store_.clear();
-  flush_to_disk();
 }
 
 void Database::load_from_disk() {
@@ -70,20 +58,21 @@ void Database::load_from_disk() {
     return;
   }
 
-  deserialize_store(store_, input);
-}
+  while (input.peek() != std::char_traits<char>::eof()) {
+    LogRecord record = LogRecord::load_from_disk(input);
+    if (!input) {
+      break;
+    }
 
-void Database::flush_to_disk() const {
-  if (path_.empty()) {
-    return;
+    switch (record.type()) {
+      case LogRecordType::Put:
+        store_[record.key()] = record.value();
+        break;
+      case LogRecordType::Remove:
+        store_.erase(record.key());
+        break;
+    }
   }
-
-  std::ofstream output(path_, std::ios::binary | std::ios::trunc);
-  if (!output.is_open()) {
-    return;
-  }
-
-  serialize_store(store_, output);
 }
 
 }  // namespace simpledb

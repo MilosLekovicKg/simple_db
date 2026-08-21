@@ -2,14 +2,10 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug simple_db_cli",
+      "name": "Debug simple_db_tests",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/build/Debug/simple_db_cli.exe",
-      "args": [
-        "--db",
-        "simple_db.db"
-      ],
+      "program": "${workspaceFolder}/build/Debug/simple_db_tests.exe",
       "cwd": "${workspaceFolder}",
       "stopAtEntry": false,
       "console": "integratedTerminal",

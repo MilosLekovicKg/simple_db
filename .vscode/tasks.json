@@ -11,14 +11,14 @@
     {
       "label": "Build",
       "type": "shell",
-      "command": "cmake --build build",
+      "command": "cmake --build build --config Debug",
       "group": "build",
       "problemMatcher": "$msCompile"
     },
     {
       "label": "Test",
       "type": "shell",
-      "command": "ctest --test-dir build --output-on-failure",
+      "command": "ctest --test-dir build -C Debug --output-on-failure",
       "group": "test",
       "problemMatcher": []
     }
