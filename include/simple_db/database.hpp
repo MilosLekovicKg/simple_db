@@ -4,9 +4,10 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
-#include "simple_db/logrecord.h"
+
+#include "simple_db/wal.h"
+#include "simple_db/storage.h"
 
 namespace simpledb {
 
@@ -14,6 +15,7 @@ class Database {
  public:
   Database() = default;
   explicit Database(std::string_view path);
+  ~Database();
 
   void put(std::string_view key, std::string_view value);
   std::optional<std::string> get(std::string_view key) const;
@@ -24,8 +26,9 @@ class Database {
  private:
   void load_from_disk();
 
-  std::unordered_map<std::string, std::string> store_;
   std::string path_;
+  std::unique_ptr<Storage> storage_;
+  std::unique_ptr<WAL> wal_;
 };
 
 }  // namespace simpledb

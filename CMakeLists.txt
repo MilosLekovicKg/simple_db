@@ -8,6 +8,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_library(simple_db
     src/database.cpp
     src/logrecord.cpp
+    src/storage.cpp
+    src/wal.cpp
 )
 target_include_directories(simple_db PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 

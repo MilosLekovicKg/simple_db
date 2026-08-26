@@ -1,4 +1,5 @@
 #include "simple_db/database.hpp"
+#include "simple_db/storage.h"
 
 #include <algorithm>
 #include <fstream>
@@ -6,46 +7,46 @@
 
 namespace simpledb {
 
-Database::Database(std::string_view path) : path_(path) {
+Database::Database(std::string_view path) 
+  : path_(path), 
+    storage_(std::make_unique<Storage>()),
+    wal_(std::make_unique<WAL>(std::string(path_) + ".wal")) {
   load_from_disk();
 }
 
-void Database::put(std::string_view key, std::string_view value) {
-  LogRecord record(LogRecordType::Put, key, value);
-  record.flush_to_disk(path_);
+Database::~Database() {
+  if (path_.empty()) {
+    return;
+  }
 
-  store_[std::string(key)] = std::string(value);
+  std::ofstream output(path_, std::ios::binary);
+  if (!output.is_open()) {
+    return;
+  }
+
+  storage_->snapshot(output);
+}
+
+void Database::put(std::string_view key, std::string_view value) {
+  wal_->append_to_wal(LogRecordType::Put, std::string(key), std::string(value));
+  storage_->put(key, value);
 }
 
 std::optional<std::string> Database::get(std::string_view key) const {
-  auto it = store_.find(std::string(key));
-  if (it == store_.end()) {
-    return std::nullopt;
-  }
-
-  return it->second;
+  return storage_->get(key);
 }
 
 bool Database::remove(std::string_view key) {
-  LogRecord record(LogRecordType::Remove, key, "");
-  record.flush_to_disk(path_);
-
-  return store_.erase(std::string(key)) > 0;
+  wal_->append_to_wal(LogRecordType::Remove, std::string(key), "");
+  return storage_->remove(key);
 }
 
 std::vector<std::string> Database::keys() const {
-  std::vector<std::string> result;
-  result.reserve(store_.size());
-  for (const auto& [key, _] : store_) {
-    result.push_back(key);
-  }
-  std::sort(result.begin(), result.end());
-
-  return result;
+  return storage_->keys();
 }
 
 std::size_t Database::size() const {
-  return store_.size();
+  return storage_->size();
 }
 
 void Database::load_from_disk() {
@@ -58,21 +59,7 @@ void Database::load_from_disk() {
     return;
   }
 
-  while (input.peek() != std::char_traits<char>::eof()) {
-    LogRecord record = LogRecord::load_from_disk(input);
-    if (!input) {
-      break;
-    }
-
-    switch (record.type()) {
-      case LogRecordType::Put:
-        store_[record.key()] = record.value();
-        break;
-      case LogRecordType::Remove:
-        store_.erase(record.key());
-        break;
-    }
-  }
+  storage_->load_snapshot(input);
 }
 
 }  // namespace simpledb
