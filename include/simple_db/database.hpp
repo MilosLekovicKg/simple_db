@@ -1,11 +1,13 @@
 #pragma once
 
 #include <cstddef>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "simple_db/snapshot_scheduler.h"
 #include "simple_db/wal.h"
 #include "simple_db/storage.h"
 
@@ -25,10 +27,12 @@ class Database {
 
  private:
   void load_from_disk();
+  void do_snapshot_and_truncate();
 
   std::string path_;
   std::unique_ptr<Storage> storage_;
   std::unique_ptr<WAL> wal_;
+  std::unique_ptr<SnapshotScheduler> scheduler_;
 };
 
 }  // namespace simpledb

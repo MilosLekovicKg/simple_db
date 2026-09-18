@@ -8,10 +8,14 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_library(simple_db
     src/database.cpp
     src/logrecord.cpp
+    src/snapshot_scheduler.cpp
     src/storage.cpp
     src/wal.cpp
 )
 target_include_directories(simple_db PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+find_package(Threads REQUIRED)
+target_link_libraries(simple_db PUBLIC Threads::Threads)
 
 target_compile_options(simple_db PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W4>

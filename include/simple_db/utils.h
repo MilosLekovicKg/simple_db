@@ -27,4 +27,14 @@ namespace simpledb {
         is.read(&str[0], size);
         return str;
     }
+
+    inline void write_uint64(std::ostream& os, uint64_t value) {
+        os.write(reinterpret_cast<const char*>(&value), sizeof(uint64_t));
+    }
+
+    inline uint64_t read_uint64(std::istream& is) {
+        uint64_t value{};
+        is.read(reinterpret_cast<char*>(&value), sizeof(uint64_t));
+        return value;
+    }
 }  // namespace simpledb

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -18,7 +20,12 @@ class Storage : public Serializable {
   std::vector<std::string> keys() const;
   std::size_t size() const;
 
-  void snapshot(std::ostream& os) const {
+  // Writes a snapshot stamped with the last WAL lsn it covers.
+  void snapshot(std::ostream& os, uint64_t last_lsn) const {
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      last_lsn_ = last_lsn;
+    }
     serialize(os);
   }
 
@@ -26,7 +33,13 @@ class Storage : public Serializable {
     deserialize(is);
   }
 
+  uint64_t last_snapshot_lsn() const {
+    return last_lsn_;
+  }
+
  private:
+  mutable std::mutex mutex_;
+  mutable uint64_t last_lsn_ = 0;
   std::unordered_map<std::string, std::string> store_;
 
   void serialize(std::ostream& os) const override;
