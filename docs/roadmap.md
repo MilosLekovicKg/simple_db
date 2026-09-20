@@ -8,10 +8,11 @@ compaction, and the background snapshot scheduler.
 1. **No `fsync`/flush guarantees.** `LogRecord::flush_to_disk` opens in append
    mode but never calls `flush()`/`fsync()` before returning. On a real crash
    (not just process exit), OS buffering could still lose "durable" writes.
-2. **`put`/`remove` aren't atomic across WAL + Storage.** A crash between
-   `wal_->append_to_wal(...)` and `storage_->put(...)` is fine (replay covers
-   it), but concurrent callers could observe a WAL-only state mid-call if
-   `Database` methods are ever called concurrently from multiple threads.
+2. ~~**`put`/`remove` aren't atomic across WAL + Storage.**~~ Addressed:
+   `Database` now holds a `write_mutex_` that serializes the WAL append +
+   Storage update in `put`/`remove`, and is also held across
+   `do_snapshot_and_truncate` so no write can slip between the snapshot and
+   the WAL compaction. Covered by the `concurrent_writes` test.
 3. **No corruption handling.** `LogRecord::deserialize`/`WAL::replay` assume
    well-formed bytes; a torn write (crash mid-`flush_to_disk`) would likely
    throw mid-read or read garbage rather than being detected/skipped.

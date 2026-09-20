@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -28,6 +29,11 @@ class Database {
  private:
   void load_from_disk();
   void do_snapshot_and_truncate();
+
+  // Serializes put/remove so the WAL append + Storage update happen
+  // atomically with respect to other writers. Also held while snapshotting
+  // so no write can slip between the snapshot and the WAL compaction.
+  std::mutex write_mutex_;
 
   std::string path_;
   std::unique_ptr<Storage> storage_;

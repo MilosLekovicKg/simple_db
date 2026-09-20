@@ -9,6 +9,7 @@
 #include <fstream>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace {
 
@@ -243,6 +244,52 @@ int main() {
         }
       }
       assert(compacted);
+    }
+
+    remove_test_file(path);
+  }
+
+  {
+    // Concurrent writers must not interleave the WAL append and the Storage
+    // update: every put/remove is atomic with respect to other writers, so
+    // the final state and the post-reload (replayed) state must agree.
+    const auto path = test_path("concurrent_writes");
+    remove_test_file(path);
+    constexpr int kThreads = 4;
+    constexpr int kWritesPerThread = 100;
+    {
+      simpledb::Database db(path.string());
+
+      std::vector<std::thread> threads;
+      threads.reserve(kThreads);
+      for (int t = 0; t < kThreads; ++t) {
+        threads.emplace_back([&db, t] {
+          for (int i = 0; i < kWritesPerThread; ++i) {
+            const std::string key = "key" + std::to_string(i);
+            const std::string value = "t" + std::to_string(t) + "_v" + std::to_string(i);
+            db.put(key, value);
+            if (i % 3 == 0) {
+              db.remove(key);
+              db.put(key, value);
+            }
+          }
+        });
+      }
+      for (auto& thread : threads) {
+        thread.join();
+      }
+
+      assert(db.size() == kWritesPerThread);
+    }
+
+    {
+      // Recovery must converge to a consistent state: no torn or reordered
+      // WAL/Storage pairs from the concurrent phase above.
+      simpledb::Database db(path.string());
+      assert(db.size() == kWritesPerThread);
+      for (int i = 0; i < kWritesPerThread; ++i) {
+        assert(db.get("key" + std::to_string(i)).has_value());
+      }
     }
 
     remove_test_file(path);

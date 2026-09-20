@@ -39,6 +39,7 @@ Database::~Database() {
 }
 
 void Database::put(std::string_view key, std::string_view value) {
+  std::lock_guard<std::mutex> lock(write_mutex_);
   wal_->append_to_wal(LogRecordType::Put, std::string(key), std::string(value));
   storage_->put(key, value);
   if (scheduler_) {
@@ -51,6 +52,7 @@ std::optional<std::string> Database::get(std::string_view key) const {
 }
 
 bool Database::remove(std::string_view key) {
+  std::lock_guard<std::mutex> lock(write_mutex_);
   wal_->append_to_wal(LogRecordType::Remove, std::string(key), "");
   bool removed = storage_->remove(key);
   if (scheduler_) {
@@ -103,6 +105,7 @@ void Database::do_snapshot_and_truncate() {
     return;
   }
 
+  std::lock_guard<std::mutex> lock(write_mutex_);
   const uint64_t lsn = wal_->current_lsn();
   const std::string tmp_path = path_ + ".tmp";
   {
