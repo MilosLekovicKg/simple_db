@@ -151,12 +151,14 @@ int main() {
       std::ifstream input(path, std::ios::binary);
       const auto loaded_put = simpledb::LogRecord::load_from_disk(input);
       const auto loaded_remove = simpledb::LogRecord::load_from_disk(input);
-      assert(loaded_put.type() == simpledb::LogRecordType::Put);
-      assert(loaded_put.key() == "key");
-      assert(loaded_put.value() == "value");
-      assert(loaded_remove.type() == simpledb::LogRecordType::Remove);
-      assert(loaded_remove.key() == "key");
-      assert(loaded_remove.value().empty());
+      assert(loaded_put.has_value());
+      assert(loaded_put->type() == simpledb::LogRecordType::Put);
+      assert(loaded_put->key() == "key");
+      assert(loaded_put->value() == "value");
+      assert(loaded_remove.has_value());
+      assert(loaded_remove->type() == simpledb::LogRecordType::Remove);
+      assert(loaded_remove->key() == "key");
+      assert(loaded_remove->value().empty());
     }
 
     remove_test_file(path);
@@ -398,6 +400,72 @@ int main() {
         }
       }
     }
+
+    remove_test_file(path);
+  }
+
+  {
+    // Corruption detection: a WAL whose last record is damaged must replay
+    // only the valid prefix and stop gracefully at the first bad record.
+    const auto path = test_path("wal_corruption");
+    remove_test_file(path);
+    const std::string wal_path = path.string() + ".wal";
+    {
+      simpledb::WAL wal(wal_path);
+      wal.append_to_wal(simpledb::LogRecordType::Put, "a", "1");
+      wal.append_to_wal(simpledb::LogRecordType::Put, "b", "2");
+      wal.append_to_wal(simpledb::LogRecordType::Put, "c", "3");
+    }
+
+    // Flip one byte inside the last record's checksum field.
+    const auto size = std::filesystem::file_size(wal_path);
+    {
+      std::fstream file(wal_path, std::ios::binary | std::ios::in | std::ios::out);
+      file.seekg(static_cast<std::streamoff>(size) - 2);
+      char byte{};
+      file.get(byte);
+      byte = static_cast<char>(byte ^ 0xFF);
+      file.seekp(static_cast<std::streamoff>(size) - 2);
+      file.put(byte);
+    }
+
+    simpledb::WAL wal(wal_path);
+    std::vector<std::string> replayed_keys;
+    wal.replay([&](const simpledb::LogRecord& record) {
+      replayed_keys.push_back(record.key());
+    });
+    assert(replayed_keys.size() == 2);
+    assert(replayed_keys[0] == "a");
+    assert(replayed_keys[1] == "b");
+    // The lsn counter must only account for the valid prefix.
+    assert(wal.current_lsn() == 2);
+
+    remove_test_file(path);
+  }
+
+  {
+    // Torn write: a WAL truncated mid-record (crash during append) must not
+    // throw or read garbage - replay yields only the complete records.
+    const auto path = test_path("wal_torn");
+    remove_test_file(path);
+    const std::string wal_path = path.string() + ".wal";
+    {
+      simpledb::WAL wal(wal_path);
+      wal.append_to_wal(simpledb::LogRecordType::Put, "a", "1");
+      wal.append_to_wal(simpledb::LogRecordType::Put, "b", "2");
+    }
+
+    // Drop the tail of the last record, simulating a crash mid-append.
+    const auto size = std::filesystem::file_size(wal_path);
+    std::filesystem::resize_file(wal_path, size - 3);
+
+    simpledb::WAL wal(wal_path);
+    std::vector<std::string> replayed_keys;
+    wal.replay([&](const simpledb::LogRecord& record) {
+      replayed_keys.push_back(record.key());
+    });
+    assert(replayed_keys.size() == 1);
+    assert(replayed_keys[0] == "a");
 
     remove_test_file(path);
   }

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <fstream>
+#include <iostream>
 #include <stdexcept>
 
 namespace simpledb {
@@ -24,12 +25,15 @@ void WAL::replay(const std::function<void(const LogRecord&)>& callback) {
 
   uint64_t max_lsn = next_lsn_.load() - 1;
   while (input.peek() != std::ifstream::traits_type::eof()) {
-    LogRecord record = LogRecord::load_from_disk(input);
-    if (!input.good() && input.eof()) {
+    const auto record = LogRecord::load_from_disk(input);
+    if (!record.has_value()) {
+      // Corrupt or torn record: trust only the valid prefix and stop here.
+      std::cerr << "WAL replay: ignoring " << wal_file_path_
+                << " from the first corrupt record onward\n";
       break;
     }
-    callback(record);
-    max_lsn = std::max(max_lsn, record.lsn());
+    callback(*record);
+    max_lsn = std::max(max_lsn, record->lsn());
   }
 
   next_lsn_.store(max_lsn + 1);
@@ -51,12 +55,15 @@ void WAL::compact(uint64_t up_to_lsn) {
   }
 
   while (input.peek() != std::ifstream::traits_type::eof()) {
-    LogRecord record = LogRecord::load_from_disk(input);
-    if (!input.good() && input.eof()) {
+    const auto record = LogRecord::load_from_disk(input);
+    if (!record.has_value()) {
+      // Corrupt or torn record: keep only the valid prefix and stop here.
+      std::cerr << "WAL compaction: ignoring " << wal_file_path_
+                << " from the first corrupt record onward\n";
       break;
     }
-    if (record.lsn() > up_to_lsn) {
-      record.flush_to_disk(tmp_path);
+    if (record->lsn() > up_to_lsn) {
+      record->flush_to_disk(tmp_path);
     }
   }
 
