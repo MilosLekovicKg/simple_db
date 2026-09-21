@@ -3,6 +3,7 @@
 #include "simple_db/storage.h"
 #include "simple_db/wal.h"
 
+#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <filesystem>
@@ -289,6 +290,112 @@ int main() {
       assert(db.size() == kWritesPerThread);
       for (int i = 0; i < kWritesPerThread; ++i) {
         assert(db.get("key" + std::to_string(i)).has_value());
+      }
+    }
+
+    remove_test_file(path);
+  }
+
+  {
+    // Stress test with correctness verification. Three mechanisms work
+    // together to catch race-condition corruption instead of just crashes:
+    //
+    // 1. Writers use disjoint key spaces, so the final value of every key
+    //    is deterministic (the last write in the owning thread's sequence).
+    // 2. Every value a key can ever hold is a pure function of
+    //    (writer, op index), so readers can reject any observed value that
+    //    is not one of the legal ones - that catches torn reads of
+    //    std::string payloads caused by a missing/short-lived lock.
+    // 3. After the threads join, the full in-memory state must match the
+    //    expected final state exactly, and a fresh reload (snapshot + WAL
+    //    replay) must converge to the same state.
+    const auto path = test_path("concurrent_stress");
+    remove_test_file(path);
+    constexpr int kReaderThreads = 2;
+    constexpr int kWriterThreads = 3;
+    constexpr int kOpsPerWriter = 300;
+    constexpr int kReadsPerReader = 500;
+
+    const auto key_for = [](int w, int i) {
+      return "w" + std::to_string(w) + "_key_" + std::to_string(i);
+    };
+    const auto value_for = [](int w, int i) {
+      return "w" + std::to_string(w) + "_v" + std::to_string(i);
+    };
+    // The last write for key (w, i) is value_for(w, i) + "_upd" when i is
+    // even, value_for(w, i) otherwise - no other thread ever touches it.
+    const auto expected_final = [&value_for](int w, int i) {
+      return (i % 2 == 0) ? value_for(w, i) + "_upd" : value_for(w, i);
+    };
+
+    std::atomic<int> corrupted_reads{0};
+    {
+      simpledb::Database db(path.string());
+
+      std::vector<std::thread> threads;
+      threads.reserve(kReaderThreads + kWriterThreads);
+
+      // Writers: each owns a disjoint key space.
+      for (int w = 0; w < kWriterThreads; ++w) {
+        threads.emplace_back([&db, w, &key_for, &value_for] {
+          for (int i = 0; i < kOpsPerWriter; ++i) {
+            db.put(key_for(w, i), value_for(w, i));
+            if (i % 2 == 0) {
+              db.put(key_for(w, i), value_for(w, i) + "_upd");
+            }
+          }
+        });
+      }
+
+      // Readers: for every probed key the only legal outcomes are
+      // "not present yet" or one of the two values the owning writer ever
+      // stores. Anything else (garbage bytes, a torn string, another
+      // writer's value) means Storage was read while being mutated.
+      for (int r = 0; r < kReaderThreads; ++r) {
+        threads.emplace_back([&db, &key_for, &value_for, &corrupted_reads] {
+          for (int i = 0; i < kReadsPerReader; ++i) {
+            for (int w = 0; w < kWriterThreads; ++w) {
+              const int key_idx = (i + w) % kOpsPerWriter;
+              const auto val = db.get(key_for(w, key_idx));
+              if (val.has_value()) {
+                const std::string base = value_for(w, key_idx);
+                if (*val != base && *val != base + "_upd") {
+                  ++corrupted_reads;
+                }
+              }
+            }
+          }
+        });
+      }
+
+      for (auto& thread : threads) {
+        thread.join();
+      }
+
+      // No reader may ever observe an impossible value.
+      assert(corrupted_reads == 0);
+
+      // The final in-memory state must match the deterministic expectation.
+      assert(db.size() == kWriterThreads * kOpsPerWriter);
+      for (int w = 0; w < kWriterThreads; ++w) {
+        for (int i = 0; i < kOpsPerWriter; ++i) {
+          assert(db.get(key_for(w, i)) ==
+                 std::optional<std::string>(expected_final(w, i)));
+        }
+      }
+    }
+
+    {
+      // Reload from snapshot + WAL: recovery must converge to the exact
+      // same state, proving no WAL/Storage pair was torn or reordered
+      // during the concurrent phase above.
+      simpledb::Database db(path.string());
+      assert(db.size() == kWriterThreads * kOpsPerWriter);
+      for (int w = 0; w < kWriterThreads; ++w) {
+        for (int i = 0; i < kOpsPerWriter; ++i) {
+          assert(db.get(key_for(w, i)) ==
+                 std::optional<std::string>(expected_final(w, i)));
+        }
       }
     }
 
