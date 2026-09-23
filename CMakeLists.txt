@@ -25,7 +25,27 @@ target_compile_options(simple_db PRIVATE
 add_executable(simple_db_cli src/main.cpp)
 target_link_libraries(simple_db_cli PRIVATE simple_db)
 
+include(FetchContent)
+FetchContent_Declare(
+    googletest
+    URL https://github.com/google/googletest/archive/refs/tags/v1.15.2.tar.gz
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+# Keep gtest on the same MSVC runtime as the project and out of install rules.
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+
 enable_testing()
-add_executable(simple_db_tests tests/basic_tests.cpp)
-target_link_libraries(simple_db_tests PRIVATE simple_db)
-add_test(NAME basic_tests COMMAND simple_db_tests)
+include(GoogleTest)
+add_executable(simple_db_tests
+    tests/concurrency_tests.cpp
+    tests/database_tests.cpp
+    tests/logrecord_tests.cpp
+    tests/recovery_tests.cpp
+    tests/storage_tests.cpp
+    tests/wal_tests.cpp
+)
+target_include_directories(simple_db_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+target_link_libraries(simple_db_tests PRIVATE simple_db GTest::gtest_main)
+gtest_discover_tests(simple_db_tests)
