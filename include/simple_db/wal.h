@@ -4,13 +4,15 @@
 #include <functional>
 #include <mutex>
 #include <string>
+#include "simple_db/durability.h"
 #include "simple_db/logrecord.h"
 
 namespace simpledb {
 class WAL {
  public:
   virtual ~WAL() = default;
-  WAL(const std::string& wal_file_path) : wal_file_path_(wal_file_path) {}
+  WAL(const std::string& wal_file_path, DurabilityMode durability)
+      : wal_file_path_(wal_file_path), durability_(durability) {}
 
   // Appends a record and returns the LSN assigned to it.
   virtual uint64_t append_to_wal(const LogRecordType type, const std::string& key, const std::string& value);
@@ -27,6 +29,7 @@ class WAL {
 
  private:
   std::string wal_file_path_;
+  DurabilityMode durability_;
   std::atomic<uint64_t> next_lsn_{1};
   std::mutex mutex_;
 };

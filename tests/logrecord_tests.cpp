@@ -15,8 +15,8 @@ TEST(LogRecordTest, FlushAndLoadRoundTrip) {
 
   simpledb::LogRecord put_record(simpledb::LogRecordType::Put, "key", "value");
   simpledb::LogRecord remove_record(simpledb::LogRecordType::Remove, "key", "");
-  put_record.flush_to_disk(tmp.str());
-  remove_record.flush_to_disk(tmp.str());
+  put_record.flush_to_disk(tmp.str(), simpledb::DurabilityMode::kSync);
+  remove_record.flush_to_disk(tmp.str(), simpledb::DurabilityMode::kSync);
 
   std::ifstream input(tmp.path(), std::ios::binary);
   const auto loaded_put = simpledb::LogRecord::load_from_disk(input);

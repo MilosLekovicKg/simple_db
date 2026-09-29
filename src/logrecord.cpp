@@ -1,4 +1,5 @@
 #include "simple_db/logrecord.h"
+#include "simple_db/durable_file.h"
 #include "simple_db/utils.h"
 #include <cstdint>
 #include <sstream>
@@ -66,13 +67,10 @@ void LogRecord::deserialize(std::istream& is) {
   value_ = std::move(value);
 }
 
-void LogRecord::flush_to_disk(const std::string& path) const {
-    std::ofstream output(path, std::ios::binary | std::ios::app);
-    if (!output.is_open()) {
-        throw std::runtime_error("Failed to open log file for writing: " + path);
-    }
-
-    serialize(output);
+void LogRecord::flush_to_disk(const std::string& path, DurabilityMode mode) const {
+    std::ostringstream buffer(std::ios::binary);
+    serialize(buffer);
+    append_file_bytes(path, buffer.str(), mode);
 }
 
 std::optional<LogRecord> LogRecord::load_from_disk(std::istream& input) {

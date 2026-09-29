@@ -7,6 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_library(simple_db
     src/database.cpp
+    src/durable_file.cpp
     src/logrecord.cpp
     src/snapshot_scheduler.cpp
     src/storage.cpp
@@ -41,6 +42,7 @@ include(GoogleTest)
 add_executable(simple_db_tests
     tests/concurrency_tests.cpp
     tests/database_tests.cpp
+    tests/durability_tests.cpp
     tests/logrecord_tests.cpp
     tests/recovery_tests.cpp
     tests/storage_tests.cpp

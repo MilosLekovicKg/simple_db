@@ -1,9 +1,9 @@
 #pragma once
 #include <cstdint>
-#include <fstream>
 #include <optional>
 #include <string>
 #include <string_view>
+#include "simple_db/durability.h"
 #include "simple_db/serializable.h"
 
 namespace simpledb {
@@ -17,7 +17,7 @@ class LogRecord : public Serializable {
     LogRecord() = default;
     LogRecord(LogRecordType type, std::string_view key, std::string_view value, uint64_t lsn = 0);
 
-    void flush_to_disk(const std::string& path) const;
+    void flush_to_disk(const std::string& path, DurabilityMode mode) const;
     // Reads one framed record. Returns nullopt on a corrupt or torn record
     // (checksum mismatch or truncated bytes); callers detect clean EOF by
     // peeking before calling.

@@ -24,7 +24,7 @@ TEST(RecoveryTest, WalRecordsBeyondSnapshotAreReplayed) {
     // record with an lsn beyond what this Database instance has committed.
     simpledb::LogRecord uncommitted(simpledb::LogRecordType::Put, "b", "2",
                                     999);
-    uncommitted.flush_to_disk(tmp.wal_path());
+    uncommitted.flush_to_disk(tmp.wal_path(), simpledb::DurabilityMode::kSync);
   }
 
   simpledb::Database db(tmp.str());

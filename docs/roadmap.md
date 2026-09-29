@@ -5,9 +5,15 @@ compaction, and the background snapshot scheduler.
 
 ## Known gaps
 
-1. **No `fsync`/flush guarantees.** `LogRecord::flush_to_disk` opens in append
-   mode but never calls `flush()`/`fsync()` before returning. On a real crash
-   (not just process exit), OS buffering could still lose "durable" writes.
+1. ~~**No `fsync`/flush guarantees.**~~ Addressed: `LogRecord::flush_to_disk`
+   now takes a `DurabilityMode` and delegates to `append_file_bytes`, which
+   flushes and `fsync`s (`FlushFileBuffers`/`_commit` on Windows) before
+   returning when the mode is `kSync`. `WAL` appends default to `kSync`
+   via `Database`'s default constructor argument; compaction copies
+   retained records with `kAsync` since they are already durable. The
+   CLI exposes `--durability async|sync` (default `sync`). Snapshot
+   `.tmp` fsync-before-rename and directory fsync are still open (see
+   suggested next steps). Covered by the `DurabilityTest` suite.
 2. ~~**`put`/`remove` aren't atomic across WAL + Storage.**~~ Addressed:
    `Database` now holds a `write_mutex_` that serializes the WAL append +
    Storage update in `put`/`remove`, and is also held across
@@ -28,8 +34,10 @@ compaction, and the background snapshot scheduler.
 
 ## Suggested next steps (roughly in order)
 
-1. **Durability**: add explicit flush/fsync to WAL appends; explore the
-   sync-write vs. batched-write tradeoff ("group commit").
+1. ~~**Durability**~~: done for WAL appends - `DurabilityMode::kSync` is the
+   default and flushes/fsyncs each append; group commit (batched fsyncs)
+   and fsyncing the snapshot `.tmp` file / containing directory before and
+   after rename remain open follow-ups.
 2. ~~**Corruption detection**~~: done - CRC32 per `LogRecord`, replay and
    compaction stop at the first bad record instead of trusting the file.
 3. **Concurrency test coverage**: add a stress test with multiple threads

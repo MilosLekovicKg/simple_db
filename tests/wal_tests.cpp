@@ -17,7 +17,7 @@ using simpledb::test::TempDbFile;
 // WAL append_to_wal assigns strictly increasing lsns.
 TEST(WalTest, AppendsAssignStrictlyIncreasingLsns) {
   TempDbFile tmp("wal_lsn");
-  simpledb::WAL wal(tmp.wal_path());
+  simpledb::WAL wal(tmp.wal_path(), simpledb::DurabilityMode::kSync);
 
   const uint64_t lsn1 =
       wal.append_to_wal(simpledb::LogRecordType::Put, "a", "1");
@@ -33,7 +33,7 @@ TEST(WalTest, CorruptChecksumReplaysValidPrefixOnly) {
   TempDbFile tmp("wal_corruption");
   const std::string wal_path = tmp.wal_path();
   {
-    simpledb::WAL wal(wal_path);
+    simpledb::WAL wal(wal_path, simpledb::DurabilityMode::kSync);
     wal.append_to_wal(simpledb::LogRecordType::Put, "a", "1");
     wal.append_to_wal(simpledb::LogRecordType::Put, "b", "2");
     wal.append_to_wal(simpledb::LogRecordType::Put, "c", "3");
@@ -52,7 +52,7 @@ TEST(WalTest, CorruptChecksumReplaysValidPrefixOnly) {
     file.put(byte);
   }
 
-  simpledb::WAL wal(wal_path);
+  simpledb::WAL wal(wal_path, simpledb::DurabilityMode::kSync);
   std::vector<std::string> replayed_keys;
   wal.replay([&](const simpledb::LogRecord& record) {
     replayed_keys.push_back(record.key());
@@ -71,7 +71,7 @@ TEST(WalTest, TornTailRecordIsIgnoredOnReplay) {
   TempDbFile tmp("wal_torn");
   const std::string wal_path = tmp.wal_path();
   {
-    simpledb::WAL wal(wal_path);
+    simpledb::WAL wal(wal_path, simpledb::DurabilityMode::kSync);
     wal.append_to_wal(simpledb::LogRecordType::Put, "a", "1");
     wal.append_to_wal(simpledb::LogRecordType::Put, "b", "2");
   }
@@ -80,7 +80,7 @@ TEST(WalTest, TornTailRecordIsIgnoredOnReplay) {
   const auto size = std::filesystem::file_size(wal_path);
   std::filesystem::resize_file(wal_path, size - 3);
 
-  simpledb::WAL wal(wal_path);
+  simpledb::WAL wal(wal_path, simpledb::DurabilityMode::kSync);
   std::vector<std::string> replayed_keys;
   wal.replay([&](const simpledb::LogRecord& record) {
     replayed_keys.push_back(record.key());

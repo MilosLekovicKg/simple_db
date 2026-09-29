@@ -14,10 +14,10 @@ constexpr std::size_t kSnapshotByteThreshold = 1 << 20;  // 1 MiB
 constexpr std::chrono::milliseconds kSnapshotInterval{30000};
 }  // namespace
 
-Database::Database(std::string_view path) 
+Database::Database(std::string_view path, DurabilityMode durability)
   : path_(path), 
     storage_(std::make_unique<Storage>()),
-    wal_(std::make_unique<WAL>(std::string(path_) + ".wal")) {
+    wal_(std::make_unique<WAL>(std::string(path_) + ".wal", durability)) {
   load_from_disk();
 
   scheduler_ = std::make_unique<SnapshotScheduler>(

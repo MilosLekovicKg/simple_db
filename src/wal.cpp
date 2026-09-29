@@ -12,7 +12,7 @@ uint64_t WAL::append_to_wal(LogRecordType type, const std::string& key, const st
   std::lock_guard<std::mutex> lock(mutex_);
   const uint64_t lsn = next_lsn_.fetch_add(1);
   LogRecord record(type, key, value, lsn);
-  record.flush_to_disk(wal_file_path_);
+  record.flush_to_disk(wal_file_path_, durability_);
   return lsn;
 }
 
@@ -63,7 +63,9 @@ void WAL::compact(uint64_t up_to_lsn) {
       break;
     }
     if (record->lsn() > up_to_lsn) {
-      record->flush_to_disk(tmp_path);
+      // Compaction just copies already-durable records into a fresh file;
+      // fsyncing each one here would be one syscall per surviving record.
+      record->flush_to_disk(tmp_path, DurabilityMode::kAsync);
     }
   }
 

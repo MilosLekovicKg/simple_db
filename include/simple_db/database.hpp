@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 
+#include "simple_db/durability.h"
 #include "simple_db/snapshot_scheduler.h"
 #include "simple_db/wal.h"
 #include "simple_db/storage.h"
@@ -17,7 +18,7 @@ namespace simpledb {
 class Database {
  public:
   Database() = default;
-  explicit Database(std::string_view path);
+  explicit Database(std::string_view path, DurabilityMode durability = DurabilityMode::kSync);
   ~Database();
 
   void put(std::string_view key, std::string_view value);

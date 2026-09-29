@@ -1,4 +1,5 @@
 #include "simple_db/database.hpp"
+#include "simple_db/durability.h"
 
 #include <iostream>
 #include <sstream>
@@ -9,7 +10,8 @@
 namespace {
 
 void print_usage(const char* program_name) {
-  std::cout << "Usage: " << program_name << " [--db <path>] [command [args]]\n";
+  std::cout << "Usage: " << program_name << " [--db <path>] [--durability <async|sync>] [command [args]]\n";
+  std::cout << "  --durability async|sync  durability of WAL appends (default: sync)\n";
   std::cout << "Commands:\n";
   std::cout << "  put <key> <value>\n";
   std::cout << "  get <key>\n";
@@ -123,6 +125,7 @@ int main(int argc, char** argv) {
   std::string db_path = "simple_db.db";
   std::vector<std::string> args;
   bool interactive = true;
+  simpledb::DurabilityMode durability = simpledb::DurabilityMode::kSync;
 
   for (int i = 1; i < argc; ++i) {
     const std::string_view current = argv[i];
@@ -132,6 +135,19 @@ int main(int argc, char** argv) {
         return 1;
       }
       db_path = argv[++i];
+      continue;
+    }
+    if (current == "--durability") {
+      if (i + 1 >= argc) {
+        std::cerr << "--durability requires a value: async or sync\n";
+        return 1;
+      }
+      const auto parsed = simpledb::parse_durability_mode(argv[++i]);
+      if (!parsed.has_value()) {
+        std::cerr << "invalid --durability value; expected async or sync\n";
+        return 1;
+      }
+      durability = *parsed;
       continue;
     }
     if (current == "--help" || current == "-h") {
@@ -147,7 +163,7 @@ int main(int argc, char** argv) {
     args.emplace_back(current);
   }
 
-  simpledb::Database db(db_path);
+  simpledb::Database db(db_path, durability);
 
   if (interactive) {
     return run_interactive(db);
