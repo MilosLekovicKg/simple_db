@@ -90,11 +90,14 @@ Exit: TSan clean, fault-injection suite green, `Options` in place.
   - **This `std::map` engine is deliberately a stepping stone.** It becomes the
     *test oracle* for the B+tree in Phase 3 (differential/randomized tests) and
     defines the API the SQL layer will call. It is not the final index.
-- **M2.2 Atomic write batches.** *Learn:* commit records and the all-or-nothing
-  recovery rule.
-  - `WriteBatch` applied atomically: WAL gets `Begin/Put/Remove/Commit`
-    framing (or a single multi-op record); recovery ignores batches without a
-    commit marker.
+- **M2.2 Atomic write batches.** **Done.** *Learn:* commit records and the
+  all-or-nothing recovery rule.
+  - `WriteBatch` applied atomically via `Database::write`: the WAL gets
+    `Begin/Put/Remove/Commit` framing in a single append; recovery applies a
+    batch only when its `Commit` record is present and discards (and cuts off)
+    an unterminated one. Readers see a batch all at once (`Engine::apply`).
+    Tests cover every torn prefix of a batch, a fault-injected write,
+    concurrent readers and a randomized comparison against a model.
   - This is the "simple" transaction (no isolation, no rollback API). It is
     intentionally superseded by M4.x but teaches the recovery rule first.
 

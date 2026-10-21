@@ -13,6 +13,7 @@
 #include "simple_db/snapshot_scheduler.h"
 #include "simple_db/wal.h"
 #include "simple_db/storage.h"
+#include "simple_db/write_batch.h"
 
 namespace simpledb {
 
@@ -26,6 +27,9 @@ class Database {
   void put(std::string_view key, std::string_view value);
   std::optional<std::string> get(std::string_view key) const;
   bool remove(std::string_view key);
+  // Applies all operations in the batch atomically and durably (per Options);
+  // see WriteBatch. An empty batch does nothing.
+  void write(const WriteBatch& batch);
   std::vector<std::string> keys() const;
   ScanResults scan(std::optional<std::string_view> start = std::nullopt,
                    std::optional<std::string_view> end = std::nullopt,

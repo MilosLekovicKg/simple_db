@@ -6,7 +6,9 @@
 #include <cstdio>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
+#include <vector>
 
 namespace simpledb {
 uint64_t WAL::append_to_wal(LogRecordType type, const std::string& key, const std::string& value) {
@@ -15,6 +17,24 @@ uint64_t WAL::append_to_wal(LogRecordType type, const std::string& key, const st
   LogRecord record(type, key, value, lsn);
   record.flush_to_disk(wal_file_path_, durability_);
   return lsn;
+}
+
+uint64_t WAL::append_batch(const WriteBatch& batch) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  const std::size_t record_count = batch.size() + 2;
+  uint64_t lsn = next_lsn_.fetch_add(record_count);
+
+  std::string bytes = LogRecord(LogRecordType::Begin, "", "", lsn++).to_bytes();
+  for (const auto& op : batch.ops()) {
+    const LogRecordType type =
+        op.type == WriteBatch::OpType::kPut ? LogRecordType::Put : LogRecordType::Remove;
+    bytes += LogRecord(type, op.key, op.value, lsn++).to_bytes();
+  }
+  const uint64_t commit_lsn = lsn;
+  bytes += LogRecord(LogRecordType::Commit, "", "", commit_lsn).to_bytes();
+
+  append_file_bytes(wal_file_path_, bytes, durability_);
+  return commit_lsn;
 }
 
 void WAL::advance_lsn_to(uint64_t lsn) {
@@ -33,6 +53,8 @@ bool WAL::replay(const std::function<void(const LogRecord&)>& callback) {
 
   bool clean = true;
   uint64_t max_lsn = next_lsn_.load() - 1;
+  // Operations of the batch currently being read; delivered at its Commit.
+  std::optional<std::vector<LogRecord>> pending;
   while (input.peek() != std::ifstream::traits_type::eof()) {
     const auto record = LogRecord::load_from_disk(input);
     if (!record.has_value()) {
@@ -42,8 +64,48 @@ bool WAL::replay(const std::function<void(const LogRecord&)>& callback) {
       clean = false;
       break;
     }
-    callback(*record);
     max_lsn = std::max(max_lsn, record->lsn());
+
+    bool framing_ok = true;
+    switch (record->type()) {
+      case LogRecordType::Begin:
+        framing_ok = !pending.has_value();
+        if (framing_ok) {
+          pending.emplace();
+        }
+        break;
+      case LogRecordType::Commit:
+        framing_ok = pending.has_value();
+        if (framing_ok) {
+          for (const auto& op : *pending) {
+            callback(op);
+          }
+          pending.reset();
+        }
+        break;
+      case LogRecordType::Put:
+      case LogRecordType::Remove:
+        if (pending.has_value()) {
+          pending->push_back(*record);
+        } else {
+          callback(*record);
+        }
+        break;
+    }
+    if (!framing_ok) {
+      std::cerr << "WAL replay: unexpected batch framing in " << wal_file_path_
+                << "; ignoring the log from this record onward\n";
+      clean = false;
+      pending.reset();
+      break;
+    }
+  }
+
+  if (pending.has_value()) {
+    // The log ends inside a batch whose Commit never became durable.
+    std::cerr << "WAL replay: discarding uncommitted batch at the end of " << wal_file_path_
+              << "\n";
+    clean = false;
   }
 
   next_lsn_.store(max_lsn + 1);

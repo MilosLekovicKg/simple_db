@@ -56,7 +56,7 @@ void LogRecord::deserialize(std::istream& is) {
   const uint64_t lsn = read_uint64(payload_stream);
   std::string key = read_string(payload_stream);
   std::string value = read_string(payload_stream);
-  if (payload_stream.fail()) {
+  if (payload_stream.fail() || type < LogRecordType::Put || type > LogRecordType::Commit) {
     is.setstate(std::ios::failbit);
     return;
   }
@@ -68,9 +68,13 @@ void LogRecord::deserialize(std::istream& is) {
 }
 
 void LogRecord::flush_to_disk(const std::string& path, DurabilityMode mode) const {
+    append_file_bytes(path, to_bytes(), mode);
+}
+
+std::string LogRecord::to_bytes() const {
     std::ostringstream buffer(std::ios::binary);
     serialize(buffer);
-    append_file_bytes(path, buffer.str(), mode);
+    return buffer.str();
 }
 
 std::optional<LogRecord> LogRecord::load_from_disk(std::istream& input) {

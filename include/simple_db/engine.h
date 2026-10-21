@@ -4,9 +4,10 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <vector>
 #include <utility>
+#include <vector>
 
+#include "simple_db/write_batch.h"
 namespace simpledb {
 
 using ScanResult = std::pair<std::string, std::string>;
@@ -31,6 +32,9 @@ class Engine {
       std::optional<std::string_view> end = std::nullopt,
       std::size_t limit = 0) const = 0;
   virtual std::size_t size() const = 0;
+  // Applies every operation in order as one unit: concurrent readers see the
+  // state before or after the batch, never a partial one.
+  virtual void apply(const WriteBatch& batch) = 0;
 };
 
 }  // namespace simpledb

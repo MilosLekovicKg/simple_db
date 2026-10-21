@@ -9,7 +9,11 @@
 namespace simpledb {
 enum class LogRecordType {
   Put,
-  Remove
+  Remove,
+  // Batch framing: Begin, then Put/Remove records, then Commit. Operations
+  // between Begin and Commit take effect only if the Commit record is present.
+  Begin,
+  Commit
 };
 
 class LogRecord : public Serializable {
@@ -18,6 +22,8 @@ class LogRecord : public Serializable {
     LogRecord(LogRecordType type, std::string_view key, std::string_view value, uint64_t lsn = 0);
 
     void flush_to_disk(const std::string& path, DurabilityMode mode) const;
+    // The framed on-disk bytes of this record (see serialize()).
+    std::string to_bytes() const;
     // Reads one framed record. Returns nullopt on a corrupt or torn record
     // (checksum mismatch or truncated bytes); callers detect clean EOF by
     // peeking before calling.

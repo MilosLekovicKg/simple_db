@@ -100,6 +100,17 @@ std::size_t Storage::size() const {
   return store_.size();
 }
 
+void Storage::apply(const WriteBatch& batch) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  for (const auto& op : batch.ops()) {
+    if (op.type == WriteBatch::OpType::kPut) {
+      store_[op.key] = op.value;
+    } else {
+      store_.erase(op.key);
+    }
+  }
+}
+
 void Storage::serialize(std::ostream& os) const {
   std::lock_guard<std::mutex> lock(mutex_);
   write_uint64(os, last_lsn_);

@@ -30,6 +30,7 @@ class Storage : public Engine, public Serializable {
       std::optional<std::string_view> end = std::nullopt,
       std::size_t limit = 0) const override;
   std::size_t size() const override;
+  void apply(const WriteBatch& batch) override;
 
   // Writes a snapshot stamped with the last WAL lsn it covers.
   void snapshot(std::ostream& os, uint64_t last_lsn) const {

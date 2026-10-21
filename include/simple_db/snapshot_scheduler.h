@@ -23,7 +23,8 @@ class SnapshotScheduler {
   void stop();
 
   // Called after each write to update the dirty counters that drive triggering.
-  void notify_write(std::size_t record_bytes);
+  // A batch counts as record_count writes.
+  void notify_write(std::size_t record_bytes, std::size_t record_count = 1);
 
  private:
   bool threshold_crossed() const;

@@ -36,11 +36,11 @@ void SnapshotScheduler::stop() {
   }
 }
 
-void SnapshotScheduler::notify_write(std::size_t record_bytes) {
+void SnapshotScheduler::notify_write(std::size_t record_bytes, std::size_t record_count) {
   bool should_wake = false;
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    pending_count_ += 1;
+    pending_count_ += record_count;
     pending_bytes_ += record_bytes;
     should_wake = threshold_crossed();
   }

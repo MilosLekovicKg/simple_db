@@ -58,6 +58,18 @@ std::optional<std::string> Database::get(std::string_view key) const {
   return storage_->get(key);
 }
 
+void Database::write(const WriteBatch& batch) {
+  if (batch.empty()) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(write_mutex_);
+  wal_->append_batch(batch);
+  storage_->apply(batch);
+  if (scheduler_) {
+    scheduler_->notify_write(batch.byte_size(), batch.size());
+  }
+}
+
 bool Database::remove(std::string_view key) {
   std::lock_guard<std::mutex> lock(write_mutex_);
   wal_->append_to_wal(LogRecordType::Remove, std::string(key), "");

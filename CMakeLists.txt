@@ -52,6 +52,7 @@ FetchContent_MakeAvailable(googletest)
 enable_testing()
 include(GoogleTest)
 add_executable(simple_db_tests
+    tests/batch_tests.cpp
     tests/concurrency_tests.cpp
     tests/database_tests.cpp
     tests/durability_tests.cpp
