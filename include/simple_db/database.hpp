@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "simple_db/durability.h"
+#include "simple_db/options.h"
 #include "simple_db/snapshot_scheduler.h"
 #include "simple_db/wal.h"
 #include "simple_db/storage.h"
@@ -18,7 +19,8 @@ namespace simpledb {
 class Database {
  public:
   Database() = default;
-  explicit Database(std::string_view path, DurabilityMode durability = DurabilityMode::kSync);
+  // Throws std::invalid_argument if options fail Options::validate().
+  explicit Database(std::string_view path, Options options = {});
   ~Database();
 
   void put(std::string_view key, std::string_view value);
@@ -34,6 +36,7 @@ class Database {
       std::optional<std::string_view> end = std::nullopt,
       std::size_t limit = 0) const;
   std::size_t size() const;
+  const Options& options() const { return options_; }
 
  private:
   void load_from_disk();
@@ -45,7 +48,7 @@ class Database {
   std::mutex write_mutex_;
 
   std::string path_;
-  DurabilityMode durability_ = DurabilityMode::kSync;
+  Options options_;
   std::unique_ptr<Storage> storage_;
   std::unique_ptr<WAL> wal_;
   std::unique_ptr<SnapshotScheduler> scheduler_;

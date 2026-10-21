@@ -60,6 +60,20 @@ The CLI supports ordered access in addition to point lookups:
 Ranges use an inclusive start and exclusive end. Use `-` for an unbounded
 side; an omitted limit means unlimited results.
 
+Settings from `simpledb::Options` can be set with CLI flags (all optional):
+
+```powershell
+.\build\Debug\simple_db_cli.exe --db demo.db `
+    --durability async `
+    --snapshot-count 500 `
+    --snapshot-bytes 4194304 `
+    --snapshot-interval-ms 10000 put k v
+```
+
+A snapshot is taken when either the write count or written byte threshold is
+reached, or when the interval elapses with unsnapshotted writes. The count,
+byte and interval values must be positive integers.
+
 ## Working with LLMs
 
 LLMs are used for generating code in this project.

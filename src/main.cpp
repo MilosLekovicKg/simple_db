@@ -1,8 +1,12 @@
 #include "simple_db/database.hpp"
 #include "simple_db/durability.h"
+#include "simple_db/options.h"
 
 #include <charconv>
+#include <chrono>
+#include <cstddef>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -11,8 +15,12 @@
 namespace {
 
 void print_usage(const char* program_name) {
-  std::cout << "Usage: " << program_name << " [--db <path>] [--durability <async|sync>] [command [args]]\n";
-  std::cout << "  --durability async|sync  durability of WAL appends (default: sync)\n";
+  std::cout << "Usage: " << program_name << " [--db <path>] [options] [command [args]]\n";
+  std::cout << "Options:\n";
+  std::cout << "  --durability async|sync     durability of WAL appends (default: sync)\n";
+  std::cout << "  --snapshot-count <n>        snapshot after n writes (default: 100)\n";
+  std::cout << "  --snapshot-bytes <n>        snapshot after n written bytes (default: 1048576)\n";
+  std::cout << "  --snapshot-interval-ms <n>  snapshot at least every n ms when dirty (default: 30000)\n";
   std::cout << "Commands:\n";
   std::cout << "  put <key> <value>\n";
   std::cout << "  get <key>\n";
@@ -22,6 +30,32 @@ void print_usage(const char* program_name) {
   std::cout << "  prefix <prefix>\n";
   std::cout << "  help\n";
   std::cout << "If no command is provided, the program starts an interactive shell.\n";
+}
+
+std::optional<std::size_t> parse_size(std::string_view text) {
+  std::size_t value = 0;
+  const auto* last = text.data() + text.size();
+  const auto parsed = std::from_chars(text.data(), last, value);
+  if (text.empty() || parsed.ec != std::errc{} || parsed.ptr != last) {
+    return std::nullopt;
+  }
+  return value;
+}
+
+// Reads the value following argv[i] as a positive integer into `out`.
+bool read_positive_size(int argc, char** argv, int& i, std::size_t& out) {
+  const std::string_view flag = argv[i];
+  if (i + 1 >= argc) {
+    std::cerr << flag << " requires a positive integer\n";
+    return false;
+  }
+  const auto parsed = parse_size(argv[++i]);
+  if (!parsed.has_value() || *parsed == 0) {
+    std::cerr << "invalid " << flag << " value; expected a positive integer\n";
+    return false;
+  }
+  out = *parsed;
+  return true;
 }
 
 int run_command(simpledb::Database& db, const std::vector<std::string>& args) {
@@ -168,7 +202,7 @@ int main(int argc, char** argv) {
   std::string db_path = "simple_db.db";
   std::vector<std::string> args;
   bool interactive = true;
-  simpledb::DurabilityMode durability = simpledb::DurabilityMode::kSync;
+  simpledb::Options options;
 
   for (int i = 1; i < argc; ++i) {
     const std::string_view current = argv[i];
@@ -190,7 +224,27 @@ int main(int argc, char** argv) {
         std::cerr << "invalid --durability value; expected async or sync\n";
         return 1;
       }
-      durability = *parsed;
+      options.durability = *parsed;
+      continue;
+    }
+    if (current == "--snapshot-count") {
+      if (!read_positive_size(argc, argv, i, options.snapshot_count_threshold)) {
+        return 1;
+      }
+      continue;
+    }
+    if (current == "--snapshot-bytes") {
+      if (!read_positive_size(argc, argv, i, options.snapshot_byte_threshold)) {
+        return 1;
+      }
+      continue;
+    }
+    if (current == "--snapshot-interval-ms") {
+      std::size_t interval_ms = 0;
+      if (!read_positive_size(argc, argv, i, interval_ms)) {
+        return 1;
+      }
+      options.snapshot_interval = std::chrono::milliseconds(interval_ms);
       continue;
     }
     if (current == "--help" || current == "-h") {
@@ -206,7 +260,7 @@ int main(int argc, char** argv) {
     args.emplace_back(current);
   }
 
-  simpledb::Database db(db_path, durability);
+  simpledb::Database db(db_path, options);
 
   if (interactive) {
     return run_interactive(db);

@@ -11,21 +11,25 @@
 namespace simpledb {
 
 namespace {
-constexpr std::size_t kSnapshotCountThreshold = 100;
-constexpr std::size_t kSnapshotByteThreshold = 1 << 20;  // 1 MiB
-constexpr std::chrono::milliseconds kSnapshotInterval{30000};
+
+Options validated(Options options) {
+  options.validate();
+  return options;
+}
+
 }  // namespace
 
-Database::Database(std::string_view path, DurabilityMode durability)
-  : path_(path), 
-    durability_(durability),
+Database::Database(std::string_view path, Options options)
+  : path_(path),
+    options_(validated(std::move(options))),
     storage_(std::make_unique<Storage>()),
-    wal_(std::make_unique<WAL>(std::string(path_) + ".wal", durability)) {
+    wal_(std::make_unique<WAL>(std::string(path_) + ".wal", options_.durability)) {
   load_from_disk();
 
   scheduler_ = std::make_unique<SnapshotScheduler>(
       [this] { do_snapshot_and_truncate(); },
-      kSnapshotCountThreshold, kSnapshotByteThreshold, kSnapshotInterval);
+      options_.snapshot_count_threshold, options_.snapshot_byte_threshold,
+      options_.snapshot_interval);
   scheduler_->start();
 }
 
@@ -130,8 +134,8 @@ void Database::do_snapshot_and_truncate() {
   std::ostringstream snapshot;
   storage_->snapshot(snapshot, lsn);
   const std::string snapshot_bytes = snapshot.str();
-  write_file_bytes(tmp_path, snapshot_bytes, durability_);
-  replace_file(tmp_path, path_, durability_);
+  write_file_bytes(tmp_path, snapshot_bytes, options_.durability);
+  replace_file(tmp_path, path_, options_.durability);
 
   wal_->compact(lsn);
 }

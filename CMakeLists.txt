@@ -56,6 +56,7 @@ add_executable(simple_db_tests
     tests/database_tests.cpp
     tests/durability_tests.cpp
     tests/logrecord_tests.cpp
+    tests/options_tests.cpp
     tests/recovery_tests.cpp
     tests/range_tests.cpp
     tests/storage_tests.cpp

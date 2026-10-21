@@ -47,7 +47,6 @@ Known limitations of the current design (each is addressed below):
 - Only point lookups; no ordered access.
 - Logging is logical and per-operation; no multi-key atomicity.
 - Snapshot `.tmp` file and directory are not fsynced; no group commit.
-- Thresholds are compile-time constants.
 - Single key space, untyped string values, no query language.
 
 ## Phase 1 - Foundations and hygiene (small, do first)
@@ -64,9 +63,11 @@ Cheap work that de-risks everything after it.
   `MOVEFILE_WRITE_THROUGH` on Windows). `durable_file` has a deterministic
   fault-injection hook for torn writes and sync failures, covered by tests.
   *Learn:* what "durable" really requires on POSIX/Windows.
-- **M1.3 Configuration.** `Options` struct (durability, snapshot thresholds,
-  later: page size, buffer pool size) wired to CLI flags. Replaces the
-  compile-time constants.
+- **M1.3 Configuration.** **Done.** `Options` (durability and snapshot
+  count/byte/interval thresholds, validated on construction) is passed to
+  `Database` and wired to CLI flags, replacing the compile-time constants.
+  Page size and buffer pool size will be added to `Options` when those
+  milestones land.
 - **M1.4 Design note: current WAL/snapshot format and recovery algorithm.**
   Write it now, while it is small; it becomes the baseline to contrast with the
   later physical log.
