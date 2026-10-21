@@ -17,13 +17,21 @@ uint64_t WAL::append_to_wal(LogRecordType type, const std::string& key, const st
   return lsn;
 }
 
-void WAL::replay(const std::function<void(const LogRecord&)>& callback) {
+void WAL::advance_lsn_to(uint64_t lsn) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (next_lsn_.load() <= lsn) {
+    next_lsn_.store(lsn + 1);
+  }
+}
+
+bool WAL::replay(const std::function<void(const LogRecord&)>& callback) {
   std::lock_guard<std::mutex> lock(mutex_);
   std::ifstream input(wal_file_path_, std::ios::binary);
   if (!input.is_open()) {
-    return;
+    return true;
   }
 
+  bool clean = true;
   uint64_t max_lsn = next_lsn_.load() - 1;
   while (input.peek() != std::ifstream::traits_type::eof()) {
     const auto record = LogRecord::load_from_disk(input);
@@ -31,6 +39,7 @@ void WAL::replay(const std::function<void(const LogRecord&)>& callback) {
       // Corrupt or torn record: trust only the valid prefix and stop here.
       std::cerr << "WAL replay: ignoring " << wal_file_path_
                 << " from the first corrupt record onward\n";
+      clean = false;
       break;
     }
     callback(*record);
@@ -38,6 +47,7 @@ void WAL::replay(const std::function<void(const LogRecord&)>& callback) {
   }
 
   next_lsn_.store(max_lsn + 1);
+  return clean;
 }
 
 void WAL::compact(uint64_t up_to_lsn) {

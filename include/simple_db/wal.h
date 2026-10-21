@@ -21,8 +21,14 @@ class WAL {
     return next_lsn_.load() - 1;
   }
 
+  // Ensures future LSNs are greater than `lsn`. Recovery calls this with the
+  // snapshot's LSN, because an empty WAL carries no LSN information.
+  void advance_lsn_to(uint64_t lsn);
+
   // Reads every record currently on disk, in order, invoking callback for each.
-  void replay(const std::function<void(const LogRecord&)>& callback);
+  // Returns false if it stopped early at a corrupt or torn record; the bytes
+  // from that record onward are still in the file until the next compact().
+  bool replay(const std::function<void(const LogRecord&)>& callback);
 
   // Rewrites the WAL file keeping only records with lsn > up_to_lsn.
   void compact(uint64_t up_to_lsn);

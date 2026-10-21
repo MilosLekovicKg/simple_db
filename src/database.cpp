@@ -105,8 +105,9 @@ void Database::load_from_disk() {
   }
 
   const uint64_t last_snapshot_lsn = storage_->last_snapshot_lsn();
+  wal_->advance_lsn_to(last_snapshot_lsn);
   bool replayed_any = false;
-  wal_->replay([&](const LogRecord& record) {
+  const bool wal_clean = wal_->replay([&](const LogRecord& record) {
     if (record.lsn() <= last_snapshot_lsn) {
       return;
     }
@@ -118,7 +119,9 @@ void Database::load_from_disk() {
     replayed_any = true;
   });
 
-  if (replayed_any) {
+  // A corrupt tail must be cut off even if nothing was replayed: otherwise
+  // new appends land behind it and the next replay would never reach them.
+  if (replayed_any || !wal_clean) {
     do_snapshot_and_truncate();
   }
 }

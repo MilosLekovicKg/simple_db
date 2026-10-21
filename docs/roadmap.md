@@ -46,7 +46,7 @@ Known limitations of the current design (each is addressed below):
 - Whole dataset must fit in RAM; every checkpoint rewrites everything.
 - Only point lookups; no ordered access.
 - Logging is logical and per-operation; no multi-key atomicity.
-- Snapshot `.tmp` file and directory are not fsynced; no group commit.
+- Snapshot has no magic/version/checksum; no group commit.
 - Single key space, untyped string values, no query language.
 
 ## Phase 1 - Foundations and hygiene (small, do first)
@@ -69,8 +69,11 @@ Cheap work that de-risks everything after it.
   Page size and buffer pool size will be added to `Options` when those
   milestones land.
 - **M1.4 Design note: current WAL/snapshot format and recovery algorithm.**
-  Write it now, while it is small; it becomes the baseline to contrast with the
-  later physical log.
+  **Done.** See [wal-snapshot-format.md](wal-snapshot-format.md). Writing it
+  uncovered and fixed two recovery bugs: LSNs restarting at 1 after a clean
+  shutdown (later writes were skipped as "already in the snapshot"), and a
+  corrupt WAL tail that was left in place so later appends were unreachable.
+  It becomes the baseline to contrast with the later physical log.
 
 Exit: TSan clean, fault-injection suite green, `Options` in place.
 
