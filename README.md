@@ -39,11 +39,26 @@ ctest --test-dir build -C Debug -N
 ctest --test-dir build -C Debug -R WalTest
 ```
 
+For a ThreadSanitizer build with Clang or GCC, configure a separate build
+directory with `-DSIMPLE_DB_ENABLE_TSAN=ON`, then build and run the same tests.
+MSVC does not support this option.
+
 You can also run the test binary directly, which gives access to GoogleTest flags:
 
 ```powershell
 .\build\Debug\simple_db_tests.exe --gtest_filter=WalTest.*
 ```
+
+The CLI supports ordered access in addition to point lookups:
+
+```powershell
+.\build\Debug\simple_db_cli.exe --db demo.db range a z
+.\build\Debug\simple_db_cli.exe --db demo.db range - - 10
+.\build\Debug\simple_db_cli.exe --db demo.db prefix user:
+```
+
+Ranges use an inclusive start and exclusive end. Use `-` for an unbounded
+side; an omitted limit means unlimited results.
 
 ## Working with LLMs
 

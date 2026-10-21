@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <optional>
 #include <string>
 #include <system_error>
@@ -7,6 +10,7 @@
 
 #include "simple_db/database.hpp"
 #include "simple_db/durability.h"
+#include "simple_db/durable_file.h"
 #include "simple_db/logrecord.h"
 #include "simple_db/wal.h"
 #include "test_utils.h"
@@ -85,6 +89,62 @@ TEST(DurabilityTest, AppendToUnwritablePathThrows) {
   EXPECT_THROW(
       record.flush_to_disk("no_such_directory/durability.wal", simpledb::DurabilityMode::kSync),
       std::system_error);
+}
+
+TEST(DurabilityTest, FaultInjectorCanModelTornWrite) {
+  TempDbFile tmp("durability_torn_write");
+  simpledb::set_durable_file_fault_injector(
+      [](simpledb::DurableFileOperation operation, const std::string&, std::size_t)
+          -> std::optional<std::size_t> {
+        if (operation == simpledb::DurableFileOperation::kWrite) {
+          return std::optional<std::size_t>(3);
+        }
+        return std::nullopt;
+      });
+
+  EXPECT_THROW(
+      simpledb::write_file_bytes(tmp.path().string(), "complete",
+                                 simpledb::DurabilityMode::kSync),
+      std::system_error);
+  simpledb::clear_durable_file_fault_injector();
+
+  EXPECT_EQ(std::filesystem::file_size(tmp.path()), uintmax_t{3});
+}
+
+TEST(DurabilityTest, FailedSnapshotReplaceLeavesOldFileIntact) {
+  TempDbFile tmp("durability_failed_replace");
+  const auto temporary_path = tmp.path().string() + ".tmp";
+  simpledb::write_file_bytes(tmp.path().string(), "old",
+                             simpledb::DurabilityMode::kAsync);
+  simpledb::write_file_bytes(temporary_path, "new",
+                             simpledb::DurabilityMode::kAsync);
+
+  simpledb::set_durable_file_fault_injector(
+      [](simpledb::DurableFileOperation operation, const std::string&, std::size_t)
+          -> std::optional<std::size_t> {
+        if (operation == simpledb::DurableFileOperation::kSync) {
+          return std::optional<std::size_t>(0);
+        }
+        return std::nullopt;
+      });
+  EXPECT_THROW(
+      simpledb::replace_file(temporary_path, tmp.path().string(),
+                             simpledb::DurabilityMode::kSync),
+      std::system_error);
+  simpledb::clear_durable_file_fault_injector();
+
+  {
+    std::ifstream old_file(tmp.path(), std::ios::binary);
+    EXPECT_EQ(std::string(std::istreambuf_iterator<char>(old_file), {}), "old");
+  }
+  EXPECT_TRUE(std::filesystem::exists(temporary_path));
+
+  simpledb::replace_file(temporary_path, tmp.path().string(),
+                         simpledb::DurabilityMode::kSync);
+  {
+    std::ifstream new_file(tmp.path(), std::ios::binary);
+    EXPECT_EQ(std::string(std::istreambuf_iterator<char>(new_file), {}), "new");
+  }
 }
 
 }  // namespace

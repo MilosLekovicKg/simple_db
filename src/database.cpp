@@ -1,9 +1,11 @@
 #include "simple_db/database.hpp"
+#include "simple_db/durable_file.h"
 #include "simple_db/storage.h"
 
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <utility>
 
 namespace simpledb {
@@ -16,6 +18,7 @@ constexpr std::chrono::milliseconds kSnapshotInterval{30000};
 
 Database::Database(std::string_view path, DurabilityMode durability)
   : path_(path), 
+    durability_(durability),
     storage_(std::make_unique<Storage>()),
     wal_(std::make_unique<WAL>(std::string(path_) + ".wal", durability)) {
   load_from_disk();
@@ -65,6 +68,22 @@ std::vector<std::string> Database::keys() const {
   return storage_->keys();
 }
 
+ScanResults Database::scan(std::optional<std::string_view> start,
+                           std::optional<std::string_view> end,
+                           std::size_t limit) const {
+  return storage_->scan(start, end, limit);
+}
+
+ScanResults Database::scan_prefix(std::string_view prefix, std::size_t limit) const {
+  return storage_->scan_prefix(prefix, limit);
+}
+
+ScanResults Database::scan_after(std::string_view start_after,
+                                 std::optional<std::string_view> end,
+                                 std::size_t limit) const {
+  return storage_->scan_after(start_after, end, limit);
+}
+
 std::size_t Database::size() const {
   return storage_->size();
 }
@@ -108,14 +127,11 @@ void Database::do_snapshot_and_truncate() {
   std::lock_guard<std::mutex> lock(write_mutex_);
   const uint64_t lsn = wal_->current_lsn();
   const std::string tmp_path = path_ + ".tmp";
-  {
-    std::ofstream output(tmp_path, std::ios::binary | std::ios::trunc);
-    if (!output.is_open()) {
-      return;
-    }
-    storage_->snapshot(output, lsn);
-  }
-  std::filesystem::rename(tmp_path, path_);
+  std::ostringstream snapshot;
+  storage_->snapshot(snapshot, lsn);
+  const std::string snapshot_bytes = snapshot.str();
+  write_file_bytes(tmp_path, snapshot_bytes, durability_);
+  replace_file(tmp_path, path_, durability_);
 
   wal_->compact(lsn);
 }

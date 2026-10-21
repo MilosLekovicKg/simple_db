@@ -5,6 +5,18 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(SIMPLE_DB_ENABLE_TSAN
+       "Enable ThreadSanitizer for the library, CLI, and tests" OFF)
+
+if(SIMPLE_DB_ENABLE_TSAN)
+  if(MSVC)
+    message(FATAL_ERROR
+            "SIMPLE_DB_ENABLE_TSAN requires Clang or GCC; MSVC does not support ThreadSanitizer")
+  endif()
+  add_compile_options(-fsanitize=thread -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=thread)
+endif()
+
 add_library(simple_db
     src/database.cpp
     src/durable_file.cpp
@@ -45,6 +57,7 @@ add_executable(simple_db_tests
     tests/durability_tests.cpp
     tests/logrecord_tests.cpp
     tests/recovery_tests.cpp
+    tests/range_tests.cpp
     tests/storage_tests.cpp
     tests/wal_tests.cpp
 )

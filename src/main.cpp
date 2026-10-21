@@ -1,6 +1,7 @@
 #include "simple_db/database.hpp"
 #include "simple_db/durability.h"
 
+#include <charconv>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -17,6 +18,8 @@ void print_usage(const char* program_name) {
   std::cout << "  get <key>\n";
   std::cout << "  delete <key>\n";
   std::cout << "  list\n";
+  std::cout << "  range <start|-> <end|-> [limit]\n";
+  std::cout << "  prefix <prefix>\n";
   std::cout << "  help\n";
   std::cout << "If no command is provided, the program starts an interactive shell.\n";
 }
@@ -75,6 +78,46 @@ int run_command(simpledb::Database& db, const std::vector<std::string>& args) {
 
     for (const auto& key : db.keys()) {
       std::cout << key << '\n';
+    }
+    return 0;
+  }
+
+  if (command == "range") {
+    if (args.size() != 3 && args.size() != 4) {
+      std::cerr << "range requires <start|-> <end|-> [limit]\n";
+      return 1;
+    }
+    std::optional<std::string_view> start;
+    std::optional<std::string_view> end;
+    if (args[1] != "-") {
+      start = args[1];
+    }
+    if (args[2] != "-") {
+      end = args[2];
+    }
+    std::size_t limit = 0;
+    if (args.size() == 4) {
+      const auto* first = args[3].data();
+      const auto* last = first + args[3].size();
+      const auto parsed = std::from_chars(first, last, limit);
+      if (parsed.ec != std::errc{} || parsed.ptr != last) {
+        std::cerr << "range limit must be a non-negative integer\n";
+        return 1;
+      }
+    }
+    for (const auto& [key, value] : db.scan(start, end, limit)) {
+      std::cout << key << '=' << value << '\n';
+    }
+    return 0;
+  }
+
+  if (command == "prefix") {
+    if (args.size() != 2) {
+      std::cerr << "prefix requires exactly one argument: <prefix>\n";
+      return 1;
+    }
+    for (const auto& [key, value] : db.scan_prefix(args[1])) {
+      std::cout << key << '=' << value << '\n';
     }
     return 0;
   }

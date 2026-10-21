@@ -13,7 +13,12 @@ enum class DurabilityMode {
 };
 
 inline std::string_view to_string(DurabilityMode mode) {
-  return mode == DurabilityMode::kSync ? "sync" : "async";
+  switch (mode) {
+    case DurabilityMode::kAsync:
+      return "async";
+    case DurabilityMode::kSync:
+      return "sync";
+  }
 }
 
 inline std::optional<DurabilityMode> parse_durability_mode(std::string_view text) {

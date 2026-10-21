@@ -1,4 +1,5 @@
 #include "simple_db/wal.h"
+#include "simple_db/durable_file.h"
 #include "simple_db/logrecord.h"
 
 #include <algorithm>
@@ -70,7 +71,6 @@ void WAL::compact(uint64_t up_to_lsn) {
   }
 
   input.close();
-  std::remove(wal_file_path_.c_str());
-  std::rename(tmp_path.c_str(), wal_file_path_.c_str());
+  replace_file(tmp_path, wal_file_path_, durability_);
 }
 }

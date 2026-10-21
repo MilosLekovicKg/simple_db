@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstddef>
@@ -107,6 +108,7 @@ TEST(ConcurrencyTest, StressConvergesToDeterministicState) {
   constexpr int kWriterThreads = 3;
   constexpr int kOpsPerWriter = 300;
   constexpr int kReadsPerReader = 500;
+  constexpr char kMissingKey[] = "__concurrent_missing_key__";
 
   const auto key_for = [](int w, int i) {
     return "w" + std::to_string(w) + "_key_" + std::to_string(i);
@@ -121,6 +123,7 @@ TEST(ConcurrencyTest, StressConvergesToDeterministicState) {
   };
 
   std::atomic<int> corrupted_reads{0};
+  std::atomic<int> failed_removes{0};
   {
     simpledb::Database db(tmp.str());
 
@@ -129,22 +132,32 @@ TEST(ConcurrencyTest, StressConvergesToDeterministicState) {
 
     // Writers: each owns a disjoint key space.
     for (int w = 0; w < kWriterThreads; ++w) {
-      threads.emplace_back([&db, w, &key_for, &value_for] {
+      threads.emplace_back([&db, w, &key_for, &value_for, &failed_removes] {
         for (int i = 0; i < kOpsPerWriter; ++i) {
           db.put(key_for(w, i), value_for(w, i));
           if (i % 2 == 0) {
+            if (!db.remove(key_for(w, i))) {
+              ++failed_removes;
+            }
             db.put(key_for(w, i), value_for(w, i) + "_upd");
           }
         }
       });
     }
 
+    std::atomic<int> invalid_key_snapshots{0};
+    std::atomic<int> invalid_sizes{0};
+
     // Readers: for every probed key the only legal outcomes are
     // "not present yet" or one of the two values the owning writer ever
     // stores. Anything else (garbage bytes, a torn string, another
-    // writer's value) means Storage was read while being mutated.
+    // writer's value) means Storage was read while being mutated. The same
+    // readers also exercise all read-side iteration paths while writers
+    // mutate the store.
     for (int r = 0; r < kReaderThreads; ++r) {
-      threads.emplace_back([&db, &key_for, &value_for, &corrupted_reads] {
+      threads.emplace_back(
+          [&db, &key_for, &value_for, &corrupted_reads,
+           &invalid_key_snapshots, &invalid_sizes] {
         for (int i = 0; i < kReadsPerReader; ++i) {
           for (int w = 0; w < kWriterThreads; ++w) {
             const int key_idx = (i + w) % kOpsPerWriter;
@@ -156,6 +169,20 @@ TEST(ConcurrencyTest, StressConvergesToDeterministicState) {
               }
             }
           }
+
+          if (db.get(kMissingKey).has_value()) {
+            ++corrupted_reads;
+          }
+
+          const auto keys = db.keys();
+          if (!std::is_sorted(keys.begin(), keys.end()) ||
+              std::adjacent_find(keys.begin(), keys.end()) != keys.end()) {
+            ++invalid_key_snapshots;
+          }
+          if (db.size() > static_cast<std::size_t>(kWriterThreads *
+                                                    kOpsPerWriter)) {
+            ++invalid_sizes;
+          }
         }
       });
     }
@@ -166,6 +193,9 @@ TEST(ConcurrencyTest, StressConvergesToDeterministicState) {
 
     // No reader may ever observe an impossible value.
     EXPECT_EQ(corrupted_reads.load(), 0);
+    EXPECT_EQ(failed_removes.load(), 0);
+    EXPECT_EQ(invalid_key_snapshots.load(), 0);
+    EXPECT_EQ(invalid_sizes.load(), 0);
 
     // The final in-memory state must match the deterministic expectation.
     ASSERT_EQ(db.size(),

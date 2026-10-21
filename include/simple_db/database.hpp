@@ -25,6 +25,14 @@ class Database {
   std::optional<std::string> get(std::string_view key) const;
   bool remove(std::string_view key);
   std::vector<std::string> keys() const;
+  ScanResults scan(std::optional<std::string_view> start = std::nullopt,
+                   std::optional<std::string_view> end = std::nullopt,
+                   std::size_t limit = 0) const;
+  ScanResults scan_prefix(std::string_view prefix, std::size_t limit = 0) const;
+  ScanResults scan_after(
+      std::string_view start_after,
+      std::optional<std::string_view> end = std::nullopt,
+      std::size_t limit = 0) const;
   std::size_t size() const;
 
  private:
@@ -37,6 +45,7 @@ class Database {
   std::mutex write_mutex_;
 
   std::string path_;
+  DurabilityMode durability_ = DurabilityMode::kSync;
   std::unique_ptr<Storage> storage_;
   std::unique_ptr<WAL> wal_;
   std::unique_ptr<SnapshotScheduler> scheduler_;
